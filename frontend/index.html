@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Status Page</title>
+</head>
+<body>
+  <h1>Status dos Servicos</h1>
+  <ul id="services"></ul>
+
+  <script>
+    fetch("http://localhost:3000/services")
+      .then(res => res.json())
+      .then(data => {
+        const list = document.getElementById("services");
+        data.forEach(s => {
+          const li = document.createElement("li");
+          li.textContent = `${s.name} - ${s.status}`;
+          list.appendChild(li);
+        });
+      })
+      .catch(err => {
+        console.error("Erro ao carregar serviços", err);
+      });
+  </script>
+</body>
+</html>
