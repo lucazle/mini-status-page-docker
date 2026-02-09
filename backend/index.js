@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const client = require('prom-client');
 const cors = require('cors');
 
-const app = express(); // ⚠️ precisa vir ANTES de usar app
+const app = express();
 const port = 3000;
 
 app.use(cors());
@@ -18,7 +18,9 @@ const pool = new Pool({
   database: 'statusdb',
 });
 
-// Métricas Prometheus
+// =====================
+// MÉTRICAS PROMETHEUS
+// =====================
 client.collectDefaultMetrics();
 
 app.get('/metrics', async (req, res) => {
@@ -26,28 +28,68 @@ app.get('/metrics', async (req, res) => {
   res.end(await client.register.metrics());
 });
 
-// Endpoint principal
+// =====================
+// ROTAS
+// =====================
+
+// Lista serviços (status atual)
 app.get('/services', async (req, res) => {
   const result = await pool.query('SELECT * FROM services');
   res.json(result.rows);
 });
 
-// Health check
+// Histórico de um serviço
+app.get('/services/:id/history', async (req, res) => {
+  const { id } = req.params;
+
+  const result = await pool.query(
+    `SELECT status, checked_at
+     FROM service_status_history
+     WHERE service_id = $1
+     ORDER BY checked_at DESC
+     LIMIT 20`,
+    [id]
+  );
+
+  res.json(result.rows);
+});
+
+// =====================
+// HEALTH CHECK + HISTÓRICO
+// =====================
 async function checkServices() {
   try {
     const services = await pool.query('SELECT * FROM services');
 
     for (const service of services.rows) {
+      let newStatus = 'OFFLINE';
+
       try {
-        await axios.get(service.url);
-        await pool.query(
-          'UPDATE services SET status=$1, last_check=NOW() WHERE id=$2',
-          ['ONLINE', service.id]
-        );
+        await axios.get(service.url, { timeout: 5000 });
+        newStatus = 'ONLINE';
       } catch {
+        newStatus = 'OFFLINE';
+      }
+
+      // Só registra se o status mudou
+      if (newStatus !== service.status) {
+        // Atualiza status atual
         await pool.query(
           'UPDATE services SET status=$1, last_check=NOW() WHERE id=$2',
-          ['OFFLINE', service.id]
+          [newStatus, service.id]
+        );
+
+        // Insere no histórico
+        await pool.query(
+          `INSERT INTO service_status_history (service_id, status)
+           VALUES ($1, $2)`,
+          [service.id, newStatus]
+        );
+      } else {
+        // Apenas atualiza o last_check
+        await pool.query(
+          'UPDATE services SET last_check=NOW() WHERE id=$1',
+          [service.id]
         );
       }
     }
@@ -56,8 +98,10 @@ async function checkServices() {
   }
 }
 
+// Executa a cada 30 segundos
 setInterval(checkServices, 30000);
 
+// =====================
 app.listen(port, () => {
   console.log(`Backend rodando na porta ${port}`);
 });

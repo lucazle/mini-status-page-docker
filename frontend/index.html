@@ -1,26 +1,92 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
+  <meta charset="UTF-8" />
   <title>Status Page</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    .online {
+      color: green;
+    }
+    .offline {
+      color: red;
+    }
+    button {
+      margin-left: 10px;
+    }
+    ul {
+      list-style: none;
+      padding-left: 0;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Status dos Servicos</h1>
+  <h1>Status dos Serviços</h1>
+
   <ul id="services"></ul>
 
+  <h2>Histórico</h2>
+  <ul id="history"></ul>
+
   <script>
+    const servicesList = document.getElementById("services");
+    const historyList = document.getElementById("history");
+
+    // Carrega serviços
     fetch("http://localhost:3000/services")
       .then(res => res.json())
-      .then(data => {
-        const list = document.getElementById("services");
-        data.forEach(s => {
+      .then(services => {
+        services.forEach(service => {
           const li = document.createElement("li");
-          li.textContent = `${s.name} - ${s.status}`;
-          list.appendChild(li);
+
+          li.innerHTML = `
+            <strong>${service.name}</strong>
+            <span class="${service.status === 'ONLINE' ? 'online' : 'offline'}">
+              - ${service.status}
+            </span>
+            <button onclick="loadHistory(${service.id}, '${service.name}')">
+              Ver histórico
+            </button>
+          `;
+
+          servicesList.appendChild(li);
         });
       })
       .catch(err => {
         console.error("Erro ao carregar serviços", err);
       });
+
+    // Carrega histórico
+    function loadHistory(serviceId, serviceName) {
+      historyList.innerHTML = `<li>Carregando histórico de ${serviceName}...</li>`;
+
+      fetch(`http://localhost:3000/services/${serviceId}/history`)
+        .then(res => res.json())
+        .then(history => {
+          historyList.innerHTML = `<li><strong>${serviceName}</strong></li>`;
+
+          if (history.length === 0) {
+            historyList.innerHTML += `<li>Sem histórico registrado</li>`;
+            return;
+          }
+
+          history.forEach(h => {
+            const li = document.createElement("li");
+            li.textContent = `${h.status} - ${new Date(h.checked_at).toLocaleString()}`;
+            historyList.appendChild(li);
+          });
+        })
+        .catch(err => {
+          historyList.innerHTML = `<li>Erro ao carregar histórico</li>`;
+          console.error(err);
+        });
+    }
   </script>
 </body>
 </html>
